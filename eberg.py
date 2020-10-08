@@ -6,6 +6,9 @@ from useful_functions import solve_linear
 def matsubara(idx,temp):
     return (2*idx+1)*np.pi*temp
 
+def mf_list(temp,freq_cut):
+    npts = int(2*np.floor(freq_cut/(2*np.pi*temp)))
+    return matsubara(np.arange(npts)-npts/2,temp)
 
 class Eberg:
     def __init__(self,pot_fn,freq_cut, en_list, weight_list, mu, dos):
@@ -24,7 +27,8 @@ class Eberg:
         
     def vec_size(self,temp):
         return self.num_freq(temp) * self.num_energies()
-    
+   
+    #does the same thing as mf_list function defined above
     def mat_freq_list(self,temp):
         npts = self.num_freq(temp)
         return matsubara(np.arange(npts)-npts/2,temp)
@@ -148,9 +152,9 @@ class Eberg:
                 
         #use the idx_sort_list to sort the en_list_long and mf_list_long arrays
         mf_list_sorted = mf_list[mf_idx_sort_list]
-        en_list_sorted = en_list[en_idx_sort_list]
-        weight_list_sorted = weight_list[en_idx_sort_list]
-        dos_list_sorted = dos(en_list_sorted)
+        en_list_sorted = self.en_list[en_idx_sort_list]
+        weight_list_sorted = self.weight_list[en_idx_sort_list]
+        dos_list_sorted = self.dos(en_list_sorted)
         Z_sorted = Z[idx_sort_list]
 
         #use above lists to construct sorted kernel
@@ -279,7 +283,7 @@ class Eberg:
         return self.find_lambda_bar(temp,om_cut,return_gap = True)
     
     def __find_eigval(self,temp):
-        kernel = self.__find_kernel_sorted(temp)
+        kernel = self.__find_kernel(temp)
         return np.real(eigs(kernel,k=1,which='LR')[0])[0]
     
     def find_tc_eigval(self,tc0,tol = 0.0001,max_iter = 10):
