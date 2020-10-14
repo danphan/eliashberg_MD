@@ -8,7 +8,11 @@ def matsubara(idx,temp):
 
 def mf_list(temp,freq_cut):
     npts = int(2*np.floor(freq_cut/(2*np.pi*temp)))
-    return matsubara(np.arange(npts)-npts/2,temp)
+
+    if num_mf > 2:
+        return matsubara(np.arange(npts)-npts/2,temp)
+    else:
+        raise Exception('number of matsubara frequencies is less than 2. increase freq_cut.')
 
 class Eberg:
     def __init__(self,pot_fn,freq_cut, en_list, weight_list, mu, dos):
@@ -20,8 +24,13 @@ class Eberg:
         self.dos = dos
         
     def num_freq(self,temp):
-        return int(2*np.floor(self.freq_cut/(2*np.pi*temp)))
-    
+        num_mf = int(2*np.floor(self.freq_cut/(2*np.pi*temp)))
+   
+        if num_mf > 2:
+            return num_mf
+        else:
+            raise Exception('number of matsubara frequencies is less than 2. increase freq_cut.')
+
     def num_energies(self):
         return len(self.en_list)
         
@@ -61,25 +70,27 @@ class Eberg:
                                                 / (np.power(mf_list_shaped * Z_in,2) + np.power(en_list_shaped-self.mu,2)))
         return Z_out
     
-    def find_Z(self,temp,verbose = 0):
+    def find_Z(self,temp,verbose = 0, self_consistent = True):
         max_iter = 100
         tol = 0.001
         
         npts = self.vec_size(temp)
         
         Z_in = np.ones(npts)
+        Z_out= np.ones(npts)
         if verbose == 1:
             print('Size of Z:',npts)
         
         for idx in range(max_iter):
-            Z_out = self.__iter_Z(temp,Z_in)
+            Z_out[:] = self.__iter_Z(temp,Z_in)
             diff = np.linalg.norm(Z_out - Z_in)
             
             if verbose == 1:
                 print('\nIteration:',idx)
                 print('diff:',diff)
 
-            
+            if self_consistent == False and idx == 1:
+                return Z_out
             
             if  diff < tol:
                 if verbose == 1:
