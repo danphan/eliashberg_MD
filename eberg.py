@@ -105,7 +105,7 @@ class Eberg:
             print('Convergence has not been achieved')
         return Z_out
     
-    def __find_kernel(self,temp,verbose = 0):
+    def find_kernel(self,temp,verbose = 0):
         num_en = self.num_energies()
         num_mf = self.num_freq(temp)
         npts = self.vec_size(temp)
@@ -143,7 +143,7 @@ class Eberg:
         return kernel
     
 
-    def __find_kernel_sorted(self,temp,om_cut = 1.0, verbose = 0):
+    def find_kernel_sorted(self,temp,om_cut = 1.0, verbose = 0):
         num_en = self.num_energies()
         num_mf = self.num_freq(temp)
         npts = self.vec_size(temp)
@@ -171,7 +171,7 @@ class Eberg:
         #use above lists to construct sorted kernel
         kernel = np.empty((npts,npts))
         for idx in range(npts):
-            kernel[idx,:] = -1.0 * temp \
+            kernel[idx,:] =  -1.0 * temp \
             * self.pot_fn(mf_list_sorted[idx],en_list_sorted[idx],mf_list_sorted,en_list_sorted)\
             * weight_list_sorted * dos_list_sorted\
             / (np.power(Z_sorted * mf_list_sorted,2) + np.power(en_list_sorted - self.mu,2))
@@ -209,7 +209,9 @@ class Eberg:
 
                 
         #use this idx_bd to break up kernel
-        kernel = -1.0*self.__find_kernel_sorted(temp)
+        #ADD EXTRA MINUS SIGN SO THAT THE KERNEL IS CONSISTENT WITH THE CONVENTION OF
+        #THE IMPLICIT RENORMALIZATION PAPER 
+        kernel = -1.0 * self.find_kernel_sorted(temp)
         
         K11 = kernel[:idx_bd, :idx_bd]
         K12 = kernel[:idx_bd, idx_bd:]
@@ -217,7 +219,7 @@ class Eberg:
         K22 = kernel[idx_bd:, idx_bd:]
         
         #use these to find lambda_bar
-        phi = np.ones(npts)
+        phi = np.random.rand(npts)
         
         phi1 = phi[:idx_bd]
         phi2 = phi[idx_bd:]
@@ -294,7 +296,7 @@ class Eberg:
         return self.find_lambda_bar(temp,om_cut,return_gap = True)
     
     def __find_eigval(self,temp):
-        kernel = self.__find_kernel(temp)
+        kernel = self.find_kernel(temp)
         return np.real(eigs(kernel,k=1,which='LR')[0])[0]
     
     def find_tc_eigval(self,tc0,tol = 0.0001,max_iter = 10):
@@ -412,7 +414,7 @@ class Eberg:
         print('\nFINDING GAP\n')
         tc = self.find_tc_eigval(0.1)
         print('\ntc:',tc)
-        e_val,e_vec = eigs(self.__find_kernel(tc),k=1,which='LR')
+        e_val,e_vec = eigs(self.find_kernel(tc),k=1,which='LR')
         phi = np.real(e_vec)
         return np.reshape(phi,len(phi))/self.find_Z(tc)
     

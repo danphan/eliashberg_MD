@@ -4,6 +4,7 @@ Make plot of Tc vs mu
 import matplotlib.pyplot as plt
 import numpy as np
 import eberg as eb
+from scipy.sparse.linalg import eigs
 
 ###########WRITE FILE NAME WHICH WILL STORE MU AND TC_LIST######## 
 filename = 'mu_tc_file.txt'
@@ -34,8 +35,8 @@ phonon_freq = 0.1
 rydberg = 13.6
 
 rho = rydberg/phonon_freq
-freq_cut = 5.0
-num_en = 200
+freq_cut = 4.0
+num_en = 80
 
 #make en_list,weight_list
 en_list,weight_list = np.polynomial.legendre.leggauss(num_en)
@@ -43,6 +44,17 @@ a=0.0000001
 b=100.
 en_list = (b-a)/2.0 * en_list + (a+b)/2.0
 weight_list = weight_list * (b-a)/2.0
+
+mu = 0.01
+pot_fn = tot_interaction(rho,mu)
+
+
+eberg = eb.Eberg(pot_fn = pot_fn,
+              freq_cut = freq_cut,
+              mu = mu,
+              en_list = en_list,
+              weight_list = weight_list,
+              dos = dos)
 
 mu_list = [0.001]
 tc_list = []
@@ -62,22 +74,10 @@ for mu in mu_list:
                   weight_list = weight_list,
                   dos = dos)
 
-#    tc_guess = 0.25
-    temp_list = [0.04,.05]
+    temp_list = [0.03,0.04,.05]
     tc = eberg.find_tc_ir(temp_list = temp_list,save_data = True)
     print('\ntc:',tc)
     tc_list.append(tc)
     with open(filename,'a') as f:
         f.writelines('{} {}\n'.format(mu,tc))
-#
-#plt.semilogx(kappa_squared_list,tc_list,'o')
-#plt.ylabel('tc')
-#plt.xlabel('kappa squared')
-#plt.savefig('fig6.pdf')
-#plt.show()
-#
-#
-
-
-
 

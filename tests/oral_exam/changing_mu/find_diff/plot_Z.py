@@ -44,31 +44,48 @@ b=100.
 en_list = (b-a)/2.0 * en_list + (a+b)/2.0
 weight_list = weight_list * (b-a)/2.0
 
-mu_list = [0.001]
-tc_list = []
-
-#create file which will contain mu and tc's
-with open(filename,'w') as f:
-    f.writelines('mu tc\n')
+mu = 0.01
+pot_fn = tot_interaction(rho,mu)
 
 
-for mu in mu_list:
-    pot_fn = tot_interaction(rho,mu)
+eberg = eb.Eberg(pot_fn = pot_fn,
+              freq_cut = freq_cut,
+              mu = mu,
+              en_list = en_list,
+              weight_list = weight_list,
+              dos = dos)
+temp = 0.01
+Z = eberg.find_Z(temp,verbose = 1)
+Z = np.reshape(Z,(-1,num_en))
+plt.plot(Z[:,0],'o')
+plt.savefig('new_plot.pdf')
+plt.show()
 
-    eberg = eb.Eberg(pot_fn = pot_fn,
-                  freq_cut = freq_cut,
-                  mu = mu,
-                  en_list = en_list,
-                  weight_list = weight_list,
-                  dos = dos)
-
-#    tc_guess = 0.25
-    temp_list = [0.04,.05]
-    tc = eberg.find_tc_ir(temp_list = temp_list,save_data = True)
-    print('\ntc:',tc)
-    tc_list.append(tc)
-    with open(filename,'a') as f:
-        f.writelines('{} {}\n'.format(mu,tc))
+#mu_list = [0.001]
+#tc_list = []
+#
+##create file which will contain mu and tc's
+#with open(filename,'w') as f:
+#    f.writelines('mu tc\n')
+#
+#
+#for mu in mu_list:
+#    pot_fn = tot_interaction(rho,mu)
+#
+#    eberg = eb.Eberg(pot_fn = pot_fn,
+#                  freq_cut = freq_cut,
+#                  mu = mu,
+#                  en_list = en_list,
+#                  weight_list = weight_list,
+#                  dos = dos)
+#
+##    tc_guess = 0.25
+#    temp_list = [0.04,.05]
+#    tc = eberg.find_tc_ir(temp_list = temp_list,save_data = True)
+#    print('\ntc:',tc)
+#    tc_list.append(tc)
+#    with open(filename,'a') as f:
+#        f.writelines('{} {}\n'.format(mu,tc))
 #
 #plt.semilogx(kappa_squared_list,tc_list,'o')
 #plt.ylabel('tc')
