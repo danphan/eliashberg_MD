@@ -7,7 +7,7 @@ def matsubara(idx,temp):
     return (2*idx+1)*np.pi*temp
 
 def mf_list(temp,freq_cut):
-    npts = int(2*np.floor(freq_cut/(2*np.pi*temp)))
+    npts = 2*int(freq_cut/(2*np.pi*temp))
 
     if num_mf > 2:
         return matsubara(np.arange(npts)-npts/2,temp)
@@ -24,7 +24,7 @@ class Eberg:
         self.dos = dos
         
     def num_freq(self,temp):
-        num_mf = int(2*np.floor(self.freq_cut/(2*np.pi*temp)))
+        num_mf = 2*int(self.freq_cut/(2*np.pi*temp))
    
         if num_mf > 2:
             return num_mf
@@ -417,15 +417,22 @@ class Eberg:
         return np.reshape(phi,len(phi))/self.find_Z(tc)
     
     """Method to find Tc if there is Cooper log. Only valid for weak coupling."""
-    def find_tc_ir(self,om_cut = 1.0):
-        
-        temp_list = np.array([0.02,0.025,0.03])
+    def find_tc_ir(self,om_cut = 1.0,temp_list = None,save_data = False):
+       
+        if temp_list is None:
+            temp_list = np.array([0.05,0.08,0.1,0.12])
+
+        temp_list = np.array(temp_list)
+
 
         L_list = np.log(1/temp_list)
 
         lambda_list = []
 
         for temp in temp_list:
+            print('\ntemp:',temp)
+            print('num_freq:',self.num_freq(temp))
+            print('size of basis: {}\n'.format(self.num_freq(temp)*self.num_energies()))
             lambda_bar = self.find_lambda_bar(temp,om_cut)
             lambda_list.append(lambda_bar)
 
@@ -434,7 +441,9 @@ class Eberg:
 #         plt.savefig('figure__'+str(mu)+'.png',format='png')
 
         #save data points
-#         np.savetxt('lambda_data_mu_'+str(mu)+'.txt',np.transpose(np.array([L_list,lambda_list])))
+        if save_data == True:
+
+            np.savetxt('lambda_data.txt',np.transpose(np.array([L_list,lambda_list])))
 
         #fit line to data points
         [m,b]=np.polyfit(L_list,lambda_list,1)
