@@ -1,7 +1,47 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.sparse.linalg import eigs, LinearOperator
-from useful_functions import solve_linear
+import inspect  #for checking signatures of functions
+
+"""
+NUMERICAL METHOD, USED IN IMPLICIT RENORMALIZATION METHOD IN ELIASHBERG CLASS DEFINED BELOW 
+"""
+#solve the equation |v> = A|v> + |b> for |v>
+#method of Prokof'ev and Svistunov from PRL 99, 250201 (2007)
+def solve_linear(A,b,max_iter=500,threshold=0.001,v_init = None):
+
+    if v_init is None:
+        v_init = np.random.rand(len(b))
+
+    v_old = v_init
+    v_avg = v_old
+
+    i =  1
+    while True:
+        #find v_{i+1}
+        v_new = np.matmul(A,v_avg)+b
+        #check if v_{i+1} and v_i are close (v has converged)
+        if np.linalg.norm(v_new-v_old) < threshold:
+            v_output = v_new
+            print('convergence of vector solution achieved')
+            print('number of iterations:',i)
+            break
+        else:
+            if i > max_iter:
+                v_output = v_old
+                print('convergence of vector solution not achieved')
+                print('diff is',np.linalg.norm(v_new-v_old))
+                break
+            #find v_avg(i+1), which will be used for the next i
+            v_avg = (v_avg*i + v_new)/(i+1)
+             #update v_{i+1}
+            v_old = v_new
+            i += 1
+    return v_output
+
+"""
+FUNCTIONS FOR MATSUBARA FREQUENCIES
+"""
 
 def matsubara(idx,temp):
     return (2*idx+1)*np.pi*temp
@@ -9,13 +49,62 @@ def matsubara(idx,temp):
 def mf_list(temp,freq_cut):
     npts = 2*int(freq_cut/(2*np.pi*temp))
 
-    if num_mf > 2:
+    if npts > 2:
         return matsubara(np.arange(npts)-npts/2,temp)
     else:
         raise Exception('number of matsubara frequencies is less than 2. increase freq_cut.')
 
+"""
+DEFINITION OF THE ELIASHBERG CLASS, WHICH CAN BE USED TO FIND Tc
+"""
+
 class Eberg:
     def __init__(self,pot_fn,freq_cut, en_list, weight_list, mu, dos):
+        
+        #check that pot_fn is a function that takes in 4 arguments
+        if len(inspect.getfullargspec(pot_fn)[0]) != 4:
+            raise TypeError('The interaction potential must take in 4 arguments: {matsubara frequency 1, energy 1, matsubara frequency 2, energy 2}')
+       
+       #if freq_cut is not a number, or is a boolean, raise type error 
+        if not isinstance(freq_cut,(int,float)) or isinstance(freq_cut,bool):
+            raise TypeError('freq_cut must be a number!')
+        #if freq_cut is a negative number, raise value error
+        if freq_cut <= 0:
+            raise ValueError('freq_cut must be positive!')
+
+        #check that en_list and weight_list are lists or numpy arrays
+        if not isinstance(en_list,(list,np.ndarray)):
+            raise TypeError('en_list must be a list!')
+        if not isinstance(weight_list,(list,np.ndarray)):
+            raise TypeError('weight_list must be a list!')
+
+        #check that en_list and weight_list have the same length
+        if len(en_list) != len(weight_list):
+            raise TypeError('en_list and weight_list must be the same length!')
+
+        #check that en_list and weight_list are lists of floats
+        if all(isinstance(x,float) for x in en_list) == False:
+            raise TypeError('en_list must be a list of only floats!')
+        if all(isinstance(x,float) for x in weight_list) == False:
+            raise TypeError('weight_list must be a list of only floats!')
+
+        #if mu is not a number, or is a boolean, raise type error 
+        if not isinstance(mu,(int,float)) or isinstance(mu,bool):
+            raise TypeError('mu must be a real number!')
+
+        
+        #check that dos is a function that takes in 1 argument
+        if len(inspect.getfullargspec(dos)[0]) != 1:
+            raise TypeError('The dos function must take in 1 argument: energy')
+
+        #check that dos is a function that gives non-negative values at all energies
+        for en in en_list:
+            #first check if dos(en) is a number
+            if not isinstance(dos(en),float):
+                raise TypeError('the density of states must be a function that returns floats!')
+            if dos(en) < 0:
+                raise ValueError('the density of states must return non-negative values!')
+
         self.pot_fn = pot_fn
         self.freq_cut = freq_cut
         self.en_list = en_list
@@ -29,7 +118,7 @@ class Eberg:
         if num_mf > 2:
             return num_mf
         else:
-            raise Exception('number of matsubara frequencies is less than 2. increase freq_cut.')
+            raise Exception('number of matsubara frequencies is less than 2. increase freq_cut or decrease temperature.')
 
     def num_energies(self):
         return len(self.en_list)
@@ -204,7 +293,7 @@ class Eberg:
                 print('\nidx_bd:',idx_bd,' out of ',npts)
                 break
         if idx_bd == None:
-            raise Exception('Choose a smaller om_cut! Om_cut must be smaller than the energy cutoffs to ensure a separation between low and high energies!')
+            raise ValueError('Choose a smaller om_cut! Om_cut must be smaller than the energy cutoffs to ensure a separation between low and high energies!')
 
 
                 
@@ -278,7 +367,7 @@ class Eberg:
                 phi_unsorted[idx] = phi[i]
             del phi
             
-            return phi_unsorted
+            return np.reshape(phi_unsorted,(-1,num_en))
             
 #             """THINK ABOUT HOW TO INCLUDE Z. DOES Z CHANGE WITH TEMP SUBSTANTIALLY?
 #             MAYBE IT DOESN'T IN THE LOW T LIMIT. AT WEAK COUPLING THEN, WE CAN TAKE Z
@@ -410,13 +499,15 @@ class Eberg:
             print('best approximation of temp:',temp)
             return temp
         
-    def find_gap(self):
+    def find_gap(self,tc0=0.1):
         print('\nFINDING GAP\n')
-        tc = self.find_tc_eigval(0.1)
+        tc = self.find_tc_eigval(tc0)
         print('\ntc:',tc)
         e_val,e_vec = eigs(self.find_kernel(tc),k=1,which='LR')
         phi = np.real(e_vec)
-        return np.reshape(phi,len(phi))/self.find_Z(tc)
+        gap =  np.reshape(phi,len(phi))/self.find_Z(tc)
+        gap = np.reshape(gap,(-1,self.num_energies()))
+        return gap
     
     """Method to find Tc if there is Cooper log. Only valid for weak coupling."""
     def find_tc_ir(self,om_cut = 1.0,temp_list = None,save_data = False):
