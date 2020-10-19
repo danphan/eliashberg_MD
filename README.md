@@ -27,4 +27,6 @@ Planned future capabilities include:
 
 - Going beyond s-wave components of the gap
 
+- Handle even and odd-frequency pairing
+
 - All of the above, but for lattice systems, including multi-band systems
