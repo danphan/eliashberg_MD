@@ -13,29 +13,31 @@ def solve_linear(A,b,max_iter=500,threshold=0.001,v_init = None):
     if v_init is None:
         v_init = np.random.rand(len(b))
 
+    #initialize vectors
     v_old = v_init
     v_avg = v_old
+    v_new = np.empty(len(b))
 
     i =  1
     while True:
         #find v_{i+1}
-        v_new = np.matmul(A,v_avg)+b
+        v_new[:] = np.matmul(A,v_avg)+b
         #check if v_{i+1} and v_i are close (v has converged)
         if np.linalg.norm(v_new-v_old) < threshold:
-            v_output = v_new
+            v_output[:] = v_new
             print('convergence of vector solution achieved')
             print('number of iterations:',i)
             break
         else:
             if i > max_iter:
-                v_output = v_old
+                v_output[:] = v_old
                 print('convergence of vector solution not achieved')
                 print('diff is',np.linalg.norm(v_new-v_old))
                 break
             #find v_avg(i+1), which will be used for the next i
-            v_avg = (v_avg*i + v_new)/(i+1)
+            v_avg[:] = (v_avg*i + v_new)/(i+1)
              #update v_{i+1}
-            v_old = v_new
+            v_old[:] = v_new
             i += 1
     return v_output
 
@@ -131,47 +133,33 @@ class Eberg:
         npts = self.num_freq(temp)
         return matsubara(np.arange(npts)-npts/2,temp)
     
-    def __iter_Z(self,temp,Z_in):
-        num_en = self.num_energies()
-        num_mf = self.num_freq(temp)
-        npts = self.vec_size(temp)
-        
-        Z_in = Z_in.reshape((num_mf, num_en))
-        
-        mf_list = self.mat_freq_list(temp)
-        
-        Z_out = np.empty(npts)
-        
-        #reshape lists for easy broadcasting
-        w_list_shaped = self.weight_list[None,:]
-        en_list_shaped = self.en_list[None,:]
-        dos_list_shaped = self.dos(en_list_shaped)
-        mf_list_shaped = mf_list[:,None]
-        
-        for idx in range(npts):
-            mf_idx, en_idx = np.divmod(idx,num_en)
-            mf = mf_list[mf_idx]
-            en = self.en_list[en_idx]
-            
-            Z_out[idx] = 1.0 - temp/mf * np.sum(w_list_shaped * dos_list_shaped \
-                                                * self.pot_fn(mf,en,mf_list_shaped,en_list_shaped)\
-                                                * mf_list_shaped * Z_in\
-                                                / (np.power(mf_list_shaped * Z_in,2) + np.power(en_list_shaped-self.mu,2)))
-        return Z_out
-    
     def find_Z(self,temp,verbose = 0, self_consistent = True):
         max_iter = 100
         tol = 0.001
         
-        npts = self.vec_size(temp)
+        num_en = self.num_energies()
+        num_mf = self.num_freq(temp)
         
-        Z_in = np.ones(npts)
-        Z_out= np.ones(npts)
+        #initalize Z arrays 
+        Z_in = np.ones((num_mf,num_en))
+        Z_out= np.empty((num_mf,num_en))
+        
+        #define arrays which will be used to iterate Z and phi
+        mf_list = self.mat_freq_list(temp)
+        interaction_array = self.pot_fn(mf_list[:,None,None,None],self.en_list[None,:,None,None],mf_list[None,None,:,None],self.en_list[None,None,None,:])
+       
         if verbose == 1:
             print('Size of Z:',npts)
         
         for idx in range(max_iter):
-            Z_out[:] = self.__iter_Z(temp,Z_in)
+            
+            #iterate Z 
+            Z_out[:,:] = 1.0 - temp/mf_list[:,None] * np.einsum('ijkl,kl',interaction_array,\
+                    self.weight_list[None,:]*self.dos(self.en_list[None,:]) * mf_list[:,None] * Z_in \
+                    /(np.power(mf_list[:,None]*Z_in,2) + np.power(self.en_list[None,:]-self.mu,2)))
+            
+            
+            
             diff = np.linalg.norm(Z_out - Z_in)
             
             if verbose == 1:
@@ -187,7 +175,7 @@ class Eberg:
                     print('diff:',diff)
                 return Z_out
             
-            Z_in[:] = Z_out
+            Z_in[:,:] = Z_out
         
         #if we have reached this point, convergence has not been achieved
         if verbose == 1:
@@ -203,8 +191,6 @@ class Eberg:
             print('\nKernel Size:',npts,'x',npts)
         
         Z = self.find_Z(temp,verbose)
-        
-        Z = Z.reshape((num_mf,num_en))
         
         mf_list = self.mat_freq_list(temp)
         
@@ -241,6 +227,7 @@ class Eberg:
             print('\nKernel Size:',npts,'x',npts)
         
         Z = self.find_Z(temp,verbose)
+        Z = np.reshape(Z,npts)
                 
         mf_list = self.mat_freq_list(temp)
         
@@ -275,11 +262,6 @@ class Eberg:
                 
         mf_list = self.mat_freq_list(temp)
         
-#         #make long list for en_tot
-#         mf_idx_list,en_idx_list = np.divmod(np.arange(npts),num_en)
-#         mf_list_long = mf_list[mf_idx_list]
-#         en_list_long = self.en_list[en_idx_list]
-#         en_tot_list = np.sqrt(np.power(mf_list_long,2) + np.power(en_list_long-self.mu,2))
         en_tot_list = np.sqrt(np.power(mf_list[:,None],2) + np.power(self.en_list-self.mu,2)).reshape(npts)
         idx_sort_list = np.argsort(en_tot_list)
         
@@ -551,6 +533,71 @@ class Eberg:
         else:
             print('tc does not exist')
             return -1
+
+    """
+    SOLVE NONLINEAR ELIASHBERG EQUATIONS FOR Z AND PHI AT A GIVEN TEMP
+    """
+        
+
+    def find_Z_phi_nonlin(self,temp, verbose = 0):
+
+        max_iter = 100
+        tol = 0.001
+        
+        npts = self.vec_size(temp)
+        
+        num_en = self.num_energies()
+        num_mf = self.num_freq(temp)
+        
+        #initialize Z and phi
+        Z_in = np.ones((num_mf,num_en))
+        Z_out= np.empty((num_mf,num_en))
+
+        phi_in = np.random.rand(num_mf,num_en)
+        phi_out= np.empty((num_mf,num_en))
+
+        if verbose == 1:
+            print('Size of Z:',npts)
+       
+        #define arrays which will be used to iterate Z and phi
+        mf_list = self.mat_freq_list(temp)
+        interaction_array = self.pot_fn(mf_list[:,None,None,None],self.en_list[None,:,None,None],mf_list[None,None,:,None],self.en_list[None,None,None,:])
+
+
+
+        for idx in range(max_iter):
+
+            #iterate Z, phi
+            Z_out[:,:] = 1.0 - temp/mf_list[:,None] * np.einsum('ijkl,kl',interaction_array,\
+                    self.weight_list[None,:]*self.dos(self.en_list[None,:]) * mf_list[:,None] * Z_in \
+                    /(np.power(mf_list[:,None]*Z_in,2) + np.power(self.en_list[None,:]-self.mu,2) + np.power(phi_in,2)))
+            
+            phi_out[:,:] = -1.0 * temp * np.einsum('ijkl,kl',interaction_array,\
+                    self.weight_list[None,:]*self.dos(self.en_list[None,:]) * phi_in \
+                    /(np.power(mf_list[:,None]*Z_in,2) + np.power(self.en_list[None,:]-self.mu,2) + np.power(phi_in,2)))
+    
+            diff = np.linalg.norm(Z_out - Z_in) + np.linalg.norm(phi_out - phi_in)
+            
+            if verbose == 1:
+                print('\nIteration:',idx)
+                print('diff:',diff)
+
+            if  diff < tol:
+                if verbose == 1:
+                    print('\nConvergence achieved')
+                    print('diff:',diff)
+                return (Z_out, phi_out)
+           
+           #initialize new Z_in and phi_in from old Z_out and phi_out for next iteration
+            Z_in[:,:] = Z_out
+            phi_in[:,:] = phi_out
+        
+        #if we have reached this point, convergence has not been achieved
+        if verbose == 1:
+            print('Convergence has not been achieved')
+            print('diff: {}'.format(diff))
+        return (Z_out,phi_out)
+
 
 def phonon_int(coupling):
     def pot_fn(mf_1,en_1,mf_2,en_2):

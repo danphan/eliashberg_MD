@@ -67,7 +67,7 @@ for i in range(4):
     
     temp = 0.2
     Z_nsc = eberg.find_Z(temp,self_consistent= False)
-    Z_nsc = np.reshape(Z_nsc,(-1,num_en))
+    #Z_nsc = np.reshape(Z_nsc,(-1,num_en))
 
 
     mf_list = eb.mf_list(temp,freq_cut)
