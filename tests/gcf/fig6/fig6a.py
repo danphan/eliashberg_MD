@@ -45,8 +45,8 @@ en_list = (b-a)/2.0 * en_list + (a+b)/2.0
 weight_list = weight_list * (b-a)/2.0
 
 
-#kappa_squared_list = [0.001,0.01,0.1,1.,2,3,4,5,6,7,8,9,10]
-kappa_squared_list = [0.001,0.01,0.1,1]
+kappa_squared_list = [0.001,0.01,0.1,1.,2,3,4,5,6,7,8,9,10]
+#kappa_squared_list = [0.001,0.01,0.1,1]
 
 mu_list = [mu_from_kappa_squared(rho,kappa_squared) for kappa_squared in kappa_squared_list]
 tc_list = []

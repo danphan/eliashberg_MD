@@ -17,6 +17,7 @@ def solve_linear(A,b,max_iter=500,threshold=0.001,v_init = None):
     v_old = v_init
     v_avg = v_old
     v_new = np.empty(len(b))
+    v_output = np.empty(len(b))
 
     i =  1
     while True:
@@ -201,17 +202,26 @@ class Eberg:
         dos_list_shaped = self.dos(en_list_shaped)
         mf_list_shaped = mf_list[:,None]
         
-        kernel = np.empty((npts,npts))
-        
-        for idx in range(npts):
-            mf_idx, en_idx = np.divmod(idx,num_en)
-            mf = mf_list[mf_idx]
-            en = self.en_list[en_idx]
-            kernel_array = -1.0 * temp * self.pot_fn(mf, en, mf_list_shaped, en_list_shaped) \
-            * w_list_shaped * dos_list_shaped \
-            / (np.power(mf_list_shaped * Z,2) + np.power(en_list_shaped - self.mu,2))
-            kernel[idx,:] = kernel_array.reshape(npts)
-            
+#        kernel = np.empty((npts,npts))
+#        
+#        for idx in range(npts):
+#            mf_idx, en_idx = np.divmod(idx,num_en)
+#            mf = mf_list[mf_idx]
+#            en = self.en_list[en_idx]
+#            kernel_array = -1.0 * temp * self.pot_fn(mf, en, mf_list_shaped, en_list_shaped) \
+#            * w_list_shaped * dos_list_shaped \
+#            / (np.power(mf_list_shaped * Z,2) + np.power(en_list_shaped - self.mu,2))
+#            kernel[idx,:] = kernel_array.reshape(npts)
+
+        #try new find of finding kernel
+        kernel = np.empty((num_mf,num_en,num_mf,num_en))
+
+        kernel = -1.0 * temp * self.pot_fn(mf_list[:,None,None,None],self.en_list[None,:,None,None],mf_list[None,None,:,None],self.en_list[None,None,None,:])\
+                * self.weight_list[None,None,None,:] * self.dos(self.en_list[None,None,None,:]) \
+                / (np.power(mf_list[None,None,:,None] * Z[None,None,:,:],2) + np.power(self.en_list[None,None,None,:]-self.mu,2))
+
+        kernel = np.reshape(kernel,(num_mf * num_en,num_mf * num_en))
+
         if verbose == 1:
             print('Kernel found')
             
@@ -251,7 +261,15 @@ class Eberg:
             * self.pot_fn(mf_list_sorted[idx],en_list_sorted[idx],mf_list_sorted,en_list_sorted)\
             * weight_list_sorted * dos_list_sorted\
             / (np.power(Z_sorted * mf_list_sorted,2) + np.power(en_list_sorted - self.mu,2))
-    
+   
+#        #construct sorted kernel, in new (hopefully faster) way
+#        kernel = np.empty((npts,npts))
+#        kernel = -1.0 * temp \
+#                * self.pot_fn(mf_list_sorted[:,None],en_list_sorted[idx][:,None],mf_list_sorted[None,:],en_list_sorted[None,:])\
+#                * weight_list_sorted[None,:] * dos_list_sorted[None,:]\
+#                / (np.power(Z_sorted[None,:] * mf_list_sorted[None,:],2) + np.power(en_list_sorted[None,:] - self.mu,2))
+
+
         return kernel
     
     """ONLY FOR IMPLICIT RENORMALIZATION. APPROPRIATE ONLY WHEN THERE IS A COOPER LOG"""
@@ -370,20 +388,28 @@ class Eberg:
         kernel = self.find_kernel(temp)
         return np.real(eigs(kernel,k=1,which='LR')[0])[0]
     
-    def find_tc_eigval(self,tc0,tol = 0.0001,max_iter = 10):
+    def find_tc_eigval(self,tc0=0.1,tol = 0.0001,max_iter = 10):
         temp_list = []
         eigval_list = []
         
         temp_1 = tc0
         eigval_1 = self.__find_eigval(temp_1)
-        bool_1 = eigval_1 > 1
+        #bool_1 = eigval_1 > 1
         
         print('temp:',temp_1)
         print('eigval:',eigval_1)
+       
+
+        #define temp_2 to be closer to T_c
         
-        temp_2 = tc0/2.
-        eigval_2 = self.__find_eigval(temp_2)
-        bool_2 = eigval_2 > 1
+        #if eigval_1 > 1, then temp_1 < T_c
+        if eigval_1 > 1:
+            temp_2 = temp_1 * 2.0
+            eigval_2 = self.__find_eigval(temp_2)
+        else:
+            temp_2 = temp_1 * 0.5
+            eigval_2 = self.__find_eigval(temp_2)
+
         
         print('temp:',temp_2)
         print('eigval:',eigval_2)
@@ -396,19 +422,28 @@ class Eberg:
         
         
         for num in range(max_iter):
-            if bool_2 == bool_1:
+            #if temp's are both still larger than T_c or both less than T_c, iterate temp's
+            if (eigval_1 > 1) == (eigval_2 > 1):
                 
                 #reassign temp_2 to temp_1
                 #reassign eigval_2 to eigval_1
                 temp_1 = temp_2
                 eigval_1 = eigval_2
+               
+                #define temp_2 to be closer to T_c
                 
-                temp_2 *= 0.5
-                eigval_2 = self.__find_eigval(temp_2)
-                bool_2 = eigval_2 > 1
+                #if eigval_1 > 1, then temp_1 < T_c
+                if eigval_1 > 1:
+                    temp_2 = temp_1 * 2.0
+                    eigval_2 = self.__find_eigval(temp_2)
+                    print('temp:',temp_2)
+                    print('eigval:',eigval_2)
+                else:
+                    temp_2 = temp_1 * 0.5
+                    eigval_2 = self.__find_eigval(temp_2)
+                    print('temp:',temp_2)
+                    print('eigval:',eigval_2)
                 
-                print('temp:',temp_2)
-                print('eigval:',eigval_2)
                 
                 temp_list.append(temp_2)
                 eigval_list.append(eigval_2)
@@ -416,12 +451,23 @@ class Eberg:
             else:
                 print("Signs are different! We have a range between T_c's")
                 break
-                
-        if bool_1 == bool_2:
+               
+        #after max iterations, we may not have 2 temp's that bound T_c
+        #if so, just return temp_2 as the closest temp to T_c
+        if eigval_1 >1 == eigval_2 > 1:
             print("Newton's method not applied. Have not bounded Tc between 2 values")
-            print("Upper bound on T_c:",temp_2)
+            
+            if eigval_2 > 1:
+                print("Lower bound on T_c:",temp_2)
+            else:
+                print("Upper bound on T_c:",temp_2)
             return temp_2
-        
+      
+        #define bools for use below
+        bool_1 = eigval_1 > 1
+        bool_2 = eigval_2 > 1
+
+        #define variables in preparation for Newton's method
         m = (eigval_2-eigval_1)/(temp_2-temp_1)
         temp = temp_1 + (1-eigval_1)/m
         eigval = self.__find_eigval(temp)
@@ -441,16 +487,15 @@ class Eberg:
         
                 
             print("\nIteration:",i)
-            
             if sign == bool_1:
                 temp_1 = temp
                 eigval_1 = eigval
                 bool_1 = sign
                 
             else:
-                temp_1 = temp
-                eigval_1 = eigval
-                bool_1 = sign
+                temp_2 = temp
+                eigval_2 = eigval
+                bool_2 = sign
                 
                 
             m = (eigval_2 - eigval_1)/(temp_2-temp_1)
@@ -458,8 +503,6 @@ class Eberg:
             eigval = self.__find_eigval(temp)
             sign  = eigval > 1
             
-            print('temp:',temp)
-            print('eigval:',eigval)
             
             temp_list.append(temp)
             eigval_list.append(eigval)
@@ -481,14 +524,19 @@ class Eberg:
             print('best approximation of temp:',temp)
             return temp
         
-    def find_gap(self,tc0=0.1):
+    def find_gap(self,tc=None,tc0 = 0.1):
+
         print('\nFINDING GAP\n')
-        tc = self.find_tc_eigval(tc0)
+
+        #check if tc is input. If not, find tc
+        if tc is None:
+            tc = self.find_tc_eigval(tc0)
+
+
         print('\ntc:',tc)
         e_val,e_vec = eigs(self.find_kernel(tc),k=1,which='LR')
         phi = np.real(e_vec)
-        gap =  np.reshape(phi,len(phi))/self.find_Z(tc)
-        gap = np.reshape(gap,(-1,self.num_energies()))
+        gap = np.reshape(phi,(-1,self.num_energies()))/self.find_Z(tc)
         return gap
     
     """Method to find Tc if there is Cooper log. Only valid for weak coupling."""
@@ -497,8 +545,16 @@ class Eberg:
         if temp_list is None:
             temp_list = np.array([0.05,0.08,0.1,0.12])
 
-        temp_list = np.array(temp_list)
+        else:
+            #check if temp_list is a list of positive numbers
+            if not isinstance(temp_list,(list,np.ndarray)):
+                raise TypeError('temp_list must be a list!')
+            if all(isinstance(x,float) and x > 0 for x in temp_list) == False:
+                raise TypeError('weight_list must be a list of only positive floats!')
 
+            
+
+        temp_list = np.array(temp_list)
 
         L_list = np.log(1/temp_list)
 
@@ -510,10 +566,6 @@ class Eberg:
             print('size of basis: {}\n'.format(self.num_freq(temp)*self.num_energies()))
             lambda_bar = self.find_lambda_bar(temp,om_cut)
             lambda_list.append(lambda_bar)
-
-        #p = plt.scatter(L_list,lambda_list)
-
-#         plt.savefig('figure__'+str(mu)+'.png',format='png')
 
         #save data points
         if save_data == True:

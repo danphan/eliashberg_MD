@@ -9,7 +9,7 @@ import eberg as eb
 filename = 'mu_tc_file.txt'
 
 def int_freq(mf_1, mf_2):
-    return -1.0/(1.0+np.power(mf_1-mf_2,2))
+    return 0.-1.0/(1.0+np.power(mf_1-mf_2,2))
 
 def int_mom(rho,mu):
     kappa_squared = np.sqrt(mu*rho)*4.0/np.pi 
@@ -35,7 +35,7 @@ rydberg = 13.6
 
 rho = rydberg/phonon_freq
 freq_cut = 5.0
-num_en_1 = 100
+num_en_1 = 70
 num_en_2 = 70
 
 #make en_list,weight_list
@@ -56,7 +56,7 @@ weight_list = np.concatenate((weight_list_1,weight_list_2))
 #####SAVE EN_LIST TO TEXT FILE ############# 
 
 
-mu_list = [0.01]
+mu_list = [0.1]
 tc_list = []
 
 ##create file which will contain mu and tc's
@@ -76,32 +76,33 @@ for mu in mu_list:
 
 #    tc_guess = 0.25
 #    temp_list = [0.03,0.04,.05]
-    tc = eberg.find_tc_eigval(0.1)
+#    tc = eberg.find_tc_eigval(tc0 = 0.02)
 #    print('\ntc:',tc)
 
-    gap = eberg.find_gap(tc0=0.1)
-#    tc_list.append(tc)
-#    with open(filename,'a') as f:
-#        f.writelines('{} {}\n'.format(mu,tc))
+#    gap = eberg.find_gap(tc0=0.1)
+##    tc_list.append(tc)
+##    with open(filename,'a') as f:
+##        f.writelines('{} {}\n'.format(mu,tc))
 
-#    gap_ir = eberg.find_gap_ir(0.03)
+    temp = 0.025
+    gap_ir = eberg.find_gap_ir(temp)
     with open('gap_file_{}.txt'.format(mu),'w') as ff:
         ff.writelines('mu temp freq_cut num_energies a b\n')
-        ff.writelines('{} {} {} {} {} {}\n'.format(mu,tc,freq_cut,len(en_list),en_list[0],en_list[-1]))
-        np.savetxt(ff,gap)
+        ff.writelines('{} {} {} {} {} {}\n'.format(mu,temp,freq_cut,len(en_list),en_list[0],en_list[-1]))
+        np.savetxt(ff,gap_ir)
     
     #save en_list
     np.savetxt('en_list_{}.txt'.format(mu),en_list)
 
+
+##plt.semilogx(kappa_squared_list,tc_list,'o')
+##plt.ylabel('tc')
+##plt.xlabel('kappa squared')
+##plt.savefig('fig6.pdf')
+##plt.show()
+##
+##
 #
-#plt.semilogx(kappa_squared_list,tc_list,'o')
-#plt.ylabel('tc')
-#plt.xlabel('kappa squared')
-#plt.savefig('fig6.pdf')
-#plt.show()
 #
 #
-
-
-
-
+#

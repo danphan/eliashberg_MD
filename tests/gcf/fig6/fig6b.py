@@ -40,7 +40,7 @@ en_list = (b-a)/2.0 * en_list + (a+b)/2.0
 weight_list = weight_list * (b-a)/2.0
 
 
-phonon_freq_list = [0.0001,0.001,0.01,0.1]
+phonon_freq_list = [0.00001, 0.0001,0.001,0.01,0.1,1.]
 tc_list = []
 
 #create file which will contain omega_L and tc's
