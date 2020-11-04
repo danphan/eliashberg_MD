@@ -18,7 +18,8 @@ for entry in os.scandir('.'):
                     gap = np.loadtxt('gap_file_{}.txt'.format(mu),skiprows=2)
                     en_list = np.loadtxt('en_list_{}.txt'.format(mu))
                     mf_list = eb.mf_list(temp,freq_cut)
-                    plt.loglog(en_list,np.abs(gap[int(len(mf_list)/2),:])/np.max(np.abs(gap)),'o',label= 'mu = {}'.format(mu))
+#                    plt.loglog(en_list,np.abs(gap[int(len(mf_list)/2),:])/np.max(np.abs(gap)),'o',label= 'mu = {}'.format(mu))
+                    plt.plot(mf_list,np.abs(gap[:,0])/np.max(np.abs(gap)),'o',label= 'mu = {}'.format(mu))
 
 #show plot
 plt.legend()

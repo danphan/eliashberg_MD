@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import fft
 import matplotlib.pyplot as plt
 from scipy.sparse.linalg import eigs, LinearOperator
 import inspect  #for checking signatures of functions
@@ -183,16 +184,82 @@ class Eberg:
             print('Convergence has not been achieved')
         return Z_out
     
-    def find_kernel(self,temp,verbose = 0):
+    def find_Z_chi(self,temp,verbose = 0, self_consistent = True):
+        max_iter = 100
+        tol = 0.001
+        
+        num_en = self.num_energies()
+        num_mf = self.num_freq(temp)
+        
+        #initalize Z arrays 
+        Z_in = np.ones((num_mf,num_en))
+        Z_out= np.empty((num_mf,num_en))
+        
+        #initalize chi arrays 
+        chi_in = np.zeros((num_mf,num_en))
+        chi_out= np.empty((num_mf,num_en))
+        
+        #define arrays which will be used to iterate Z and phi
+        mf_list = self.mat_freq_list(temp)
+        interaction_array = self.pot_fn(mf_list[:,None,None,None],self.en_list[None,:,None,None],mf_list[None,None,:,None],self.en_list[None,None,None,:])
+       
+        if verbose == 1:
+            print('Size of Z:',num_en * num_mf)
+        
+        for idx in range(max_iter):
+            
+            #iterate Z 
+            Z_out[:,:] = 1.0 - temp/mf_list[:,None] * np.einsum('ijkl,kl',interaction_array,\
+                    self.weight_list[None,:]*self.dos(self.en_list[None,:]) * mf_list[:,None] * Z_in \
+                    /(np.power(mf_list[:,None]*Z_in,2) + np.power(self.en_list[None,:]-self.mu + chi_in,2)))
+            
+            #iterate chi 
+            chi_out[:,:] =  temp * np.einsum('ijkl,kl',interaction_array,\
+                    self.weight_list[None,:]*self.dos(self.en_list[None,:]) * (self.en_list[None,:]-self.mu + chi_in) \
+                    /(np.power(mf_list[:,None]*Z_in,2) + np.power(self.en_list[None,:]-self.mu + chi_in,2)))
+            
+            
+            diff = np.linalg.norm(Z_out - Z_in) + np.linalg.norm(chi_out - chi_in)
+            
+            if verbose == 1:
+                print('\nIteration:',idx)
+                print('diff:',diff)
+
+            if self_consistent == False and idx == 1:
+                return (Z_out,chi_out)
+            
+            if  diff < tol:
+                if verbose == 1:
+                    print('\nConvergence achieved')
+                    print('diff:',diff)
+                return (Z_out,chi_out)
+            
+            Z_in[:,:] = Z_out
+            chi_in[:,:] = chi_out
+        
+        #if we have reached this point, convergence has not been achieved
+        if verbose == 1:
+            print('Convergence has not been achieved')
+        return (Z_out,chi_out)
+
+    def find_kernel(self,temp,verbose = 0,include_chi = False):
+
+        if not isinstance(include_chi,bool):
+            raise TypeError('include_chi must be a bool!')
+
         num_en = self.num_energies()
         num_mf = self.num_freq(temp)
         npts = self.vec_size(temp)
         
         if verbose == 1:
             print('\nKernel Size:',npts,'x',npts)
-        
-        Z = self.find_Z(temp,verbose)
-        
+       
+        if include_chi == True:
+            Z,chi = self.find_Z_chi(temp,verbose)
+       
+        else:
+            Z = self.find_Z(temp,verbose)
+
         mf_list = self.mat_freq_list(temp)
         
         
@@ -202,23 +269,21 @@ class Eberg:
         dos_list_shaped = self.dos(en_list_shaped)
         mf_list_shaped = mf_list[:,None]
         
-#        kernel = np.empty((npts,npts))
-#        
-#        for idx in range(npts):
-#            mf_idx, en_idx = np.divmod(idx,num_en)
-#            mf = mf_list[mf_idx]
-#            en = self.en_list[en_idx]
-#            kernel_array = -1.0 * temp * self.pot_fn(mf, en, mf_list_shaped, en_list_shaped) \
-#            * w_list_shaped * dos_list_shaped \
-#            / (np.power(mf_list_shaped * Z,2) + np.power(en_list_shaped - self.mu,2))
-#            kernel[idx,:] = kernel_array.reshape(npts)
 
         #try new find of finding kernel
         kernel = np.empty((num_mf,num_en,num_mf,num_en))
 
-        kernel = -1.0 * temp * self.pot_fn(mf_list[:,None,None,None],self.en_list[None,:,None,None],mf_list[None,None,:,None],self.en_list[None,None,None,:])\
-                * self.weight_list[None,None,None,:] * self.dos(self.en_list[None,None,None,:]) \
-                / (np.power(mf_list[None,None,:,None] * Z[None,None,:,:],2) + np.power(self.en_list[None,None,None,:]-self.mu,2))
+        if include_chi == True:
+
+            kernel = -1.0 * temp * self.pot_fn(mf_list[:,None,None,None],self.en_list[None,:,None,None],mf_list[None,None,:,None],self.en_list[None,None,None,:])\
+                    * self.weight_list[None,None,None,:] * self.dos(self.en_list[None,None,None,:]) \
+                    / (np.power(mf_list[None,None,:,None] * Z[None,None,:,:],2) + np.power(self.en_list[None,None,None,:]-self.mu + chi,2))
+
+        else:
+            
+            kernel = -1.0 * temp * self.pot_fn(mf_list[:,None,None,None],self.en_list[None,:,None,None],mf_list[None,None,:,None],self.en_list[None,None,None,:])\
+                    * self.weight_list[None,None,None,:] * self.dos(self.en_list[None,None,None,:]) \
+                    / (np.power(mf_list[None,None,:,None] * Z[None,None,:,:],2) + np.power(self.en_list[None,None,None,:]-self.mu,2))
 
         kernel = np.reshape(kernel,(num_mf * num_en,num_mf * num_en))
 
@@ -254,20 +319,20 @@ class Eberg:
         dos_list_sorted = self.dos(en_list_sorted)
         Z_sorted = Z[idx_sort_list]
 
-        #use above lists to construct sorted kernel
-        kernel = np.empty((npts,npts))
-        for idx in range(npts):
-            kernel[idx,:] =  -1.0 * temp \
-            * self.pot_fn(mf_list_sorted[idx],en_list_sorted[idx],mf_list_sorted,en_list_sorted)\
-            * weight_list_sorted * dos_list_sorted\
-            / (np.power(Z_sorted * mf_list_sorted,2) + np.power(en_list_sorted - self.mu,2))
-   
-#        #construct sorted kernel, in new (hopefully faster) way
+#        #use above lists to construct sorted kernel
 #        kernel = np.empty((npts,npts))
-#        kernel = -1.0 * temp \
-#                * self.pot_fn(mf_list_sorted[:,None],en_list_sorted[idx][:,None],mf_list_sorted[None,:],en_list_sorted[None,:])\
-#                * weight_list_sorted[None,:] * dos_list_sorted[None,:]\
-#                / (np.power(Z_sorted[None,:] * mf_list_sorted[None,:],2) + np.power(en_list_sorted[None,:] - self.mu,2))
+#        for idx in range(npts):
+#            kernel[idx,:] =  -1.0 * temp \
+#            * self.pot_fn(mf_list_sorted[idx],en_list_sorted[idx],mf_list_sorted,en_list_sorted)\
+#            * weight_list_sorted * dos_list_sorted\
+#            / (np.power(Z_sorted * mf_list_sorted,2) + np.power(en_list_sorted - self.mu,2))
+   
+        #construct sorted kernel, in new (hopefully faster) way
+        kernel = np.empty((npts,npts))
+        kernel = -1.0 * temp \
+                * self.pot_fn(mf_list_sorted[:,None],en_list_sorted[:,None],mf_list_sorted[None,:],en_list_sorted[None,:])\
+                * weight_list_sorted[None,:] * dos_list_sorted[None,:]\
+                / (np.power(Z_sorted[None,:] * mf_list_sorted[None,:],2) + np.power(en_list_sorted[None,:] - self.mu,2))
 
 
         return kernel
@@ -384,16 +449,16 @@ class Eberg:
         Therefore, we simply point to that function here."""
         return self.find_lambda_bar(temp,om_cut,return_gap = True)
     
-    def __find_eigval(self,temp):
-        kernel = self.find_kernel(temp)
+    def __find_eigval(self,temp,verbose = False, include_chi = False):
+        kernel = self.find_kernel(temp,verbose = verbose, include_chi = include_chi)
         return np.real(eigs(kernel,k=1,which='LR')[0])[0]
     
-    def find_tc_eigval(self,tc0=0.1,tol = 0.0001,max_iter = 10):
+    def find_tc_eigval(self,tc0=0.1,tol = 0.0001,max_iter = 10,include_chi = False):
         temp_list = []
         eigval_list = []
         
         temp_1 = tc0
-        eigval_1 = self.__find_eigval(temp_1)
+        eigval_1 = self.__find_eigval(temp_1,include_chi = include_chi)
         #bool_1 = eigval_1 > 1
         
         print('temp:',temp_1)
@@ -405,10 +470,10 @@ class Eberg:
         #if eigval_1 > 1, then temp_1 < T_c
         if eigval_1 > 1:
             temp_2 = temp_1 * 2.0
-            eigval_2 = self.__find_eigval(temp_2)
+            eigval_2 = self.__find_eigval(temp_2,include_chi = include_chi)
         else:
             temp_2 = temp_1 * 0.5
-            eigval_2 = self.__find_eigval(temp_2)
+            eigval_2 = self.__find_eigval(temp_2,include_chi = include_chi)
 
         
         print('temp:',temp_2)
@@ -435,12 +500,12 @@ class Eberg:
                 #if eigval_1 > 1, then temp_1 < T_c
                 if eigval_1 > 1:
                     temp_2 = temp_1 * 2.0
-                    eigval_2 = self.__find_eigval(temp_2)
+                    eigval_2 = self.__find_eigval(temp_2,include_chi = include_chi)
                     print('temp:',temp_2)
                     print('eigval:',eigval_2)
                 else:
                     temp_2 = temp_1 * 0.5
-                    eigval_2 = self.__find_eigval(temp_2)
+                    eigval_2 = self.__find_eigval(temp_2,include_chi = include_chi)
                     print('temp:',temp_2)
                     print('eigval:',eigval_2)
                 
@@ -470,7 +535,7 @@ class Eberg:
         #define variables in preparation for Newton's method
         m = (eigval_2-eigval_1)/(temp_2-temp_1)
         temp = temp_1 + (1-eigval_1)/m
-        eigval = self.__find_eigval(temp)
+        eigval = self.__find_eigval(temp,include_chi = include_chi)
         sign  = eigval > 1
         
         #Here begins Newton's method
@@ -500,7 +565,7 @@ class Eberg:
                 
             m = (eigval_2 - eigval_1)/(temp_2-temp_1)
             temp = temp_1 + (1-eigval_1)/m
-            eigval = self.__find_eigval(temp)
+            eigval = self.__find_eigval(temp,include_chi = include_chi)
             sign  = eigval > 1
             
             
@@ -524,19 +589,25 @@ class Eberg:
             print('best approximation of temp:',temp)
             return temp
         
-    def find_gap(self,tc=None,tc0 = 0.1):
+    def find_gap(self,tc=None,tc0 = 0.1,include_chi = False):
 
         print('\nFINDING GAP\n')
 
         #check if tc is input. If not, find tc
         if tc is None:
-            tc = self.find_tc_eigval(tc0)
+            tc = self.find_tc_eigval(tc0,include_chi = include_chi)
 
 
         print('\ntc:',tc)
-        e_val,e_vec = eigs(self.find_kernel(tc),k=1,which='LR')
+        e_val,e_vec = eigs(self.find_kernel(tc,include_chi = include_chi),k=1,which='LR')
         phi = np.real(e_vec)
-        gap = np.reshape(phi,(-1,self.num_energies()))/self.find_Z(tc)
+        
+        if include_chi == True:
+            Z = self.find_Z(tc)
+        else:
+            Z,chi = self.find_Z_chi(tc)
+
+        gap = np.reshape(phi,(-1,self.num_energies()))/Z
         return gap
     
     """Method to find Tc if there is Cooper log. Only valid for weak coupling."""
@@ -650,6 +721,124 @@ class Eberg:
             print('diff: {}'.format(diff))
         return (Z_out,phi_out)
 
+    def find_Z_phi_nonlin_fft(self,temp, verbose = 0):
+
+        max_iter = 100
+        tol = 0.0001
+        
+        npts = self.vec_size(temp)
+        
+        num_en = self.num_energies()
+        num_mf = self.num_freq(temp)
+        
+        #initialize Z and phi
+        Z_in = np.ones((num_mf,num_en))
+        Z_out= np.empty((num_mf,num_en))
+
+        phi_in = np.random.rand(num_mf,num_en)
+        phi_out= np.empty((num_mf,num_en))
+
+        if verbose == 1:
+            print('Size of Z:',npts)
+        
+        
+        #define function that expands list from just bosonic frequencies
+        def expand_boson(boson_freq_vec):
+            #make longer list that includes space for fermionic frequencies
+            all_freq_vec = np.zeros(2*len(boson_freq_vec) - 1)
+            all_freq_vec[::2] = boson_freq_vec
+
+            #reorder frequencies to standard order for fourier transform
+            all_freq_vec = np.roll(all_freq_vec,1-len(boson_freq_vec))
+            return all_freq_vec
+
+
+        #define function that expands list from just fermionic frequencies
+        def expand_fermion(fermion_freq_vec):
+            #make longer list that includes space for bosonic frequencies
+            all_freq_vec = np.zeros(2*len(fermion_freq_vec) + 1)
+            all_freq_vec[1::2] = fermion_freq_vec
+            #reorder frequencies to standard order for fourier transform
+            all_freq_vec = np.roll(all_freq_vec,-1*len(fermion_freq_vec))
+            return all_freq_vec
+
+        #define function that picks out fermionic frequencies
+        def contract_fermion(all_freq_vec):
+            #reorder frequencies to standard order before fourier transform(most negative frequency first)
+            #select out only the fermionic frequencies (the rest should be zero)
+            fermion_freq_vec = np.roll(all_freq_vec, int((len(all_freq_vec)-1)/2))[1::2]
+            return fermion_freq_vec
+
+        #evaluate pot_fn at bosonic frequencies, store for iteration below
+        mf_list = self.mat_freq_list(temp)
+        shifted_mf_list = mf_list - np.pi * temp
+        boson_freq_list = np.append(shifted_mf_list, shifted_mf_list[-1] + 2*np.pi*temp)
+        pot_freq_arr = self.pot_fn(boson_freq_list[:,None,None], self.en_list[None,:,None],0.0, self.en_list[None,None,:])
+
+        #use the above list to fourier transform to (imaginary) time
+        pot_freq_arr = np.apply_along_axis(expand_boson,0,pot_freq_arr)
+        pot_time_arr = fft.fft(pot_freq_arr,axis=0)
+
+ 
+        #define arrays which will be used to iterate Z and phi
+        mf_list = self.mat_freq_list(temp)
+        fermion_arr = np.empty(np.shape(Z_in))
+        expanded_fermion_arr = np.empty((2*len(mf_list)+1,len(self.en_list)))
+
+
+        for idx in range(max_iter):
+
+            ####iterate Z
+            fermion_arr[:,:] = self.weight_list[None,:]*self.dos(self.en_list[None,:]) * mf_list[:,None] * Z_in \
+                         /(np.power(mf_list[:,None]*Z_in,2) + np.power(self.en_list[None,:]-self.mu,2) + np.power(phi_in,2))
+
+            #expand zeroth axis to all frequencies (not just fermionic)
+            expanded_fermion_arr[:,:] = np.apply_along_axis(expand_fermion,0,fermion_arr)
+            
+            #fourier transform expanded array to (imaginary) time
+            expanded_fermion_arr[:,:] = fft.fft(expanded_fermion_arr,axis=0)
+
+            #contract energies and multiply arrays along time axis, then extract fermionic frequencies
+            fermion_arr[:,:] = np.apply_along_axis(contract_fermion,0,fft.ifft(np.einsum('ijk,ik->ij',pot_time_arr,expanded_fermion_arr),axis=0))
+
+            Z_out[:,:] = 1.0 - temp/mf_list[:,None] * fermion_arr 
+
+            ####iterate phi 
+            fermion_arr[:,:] = self.weight_list[None,:]*self.dos(self.en_list[None,:]) * phi_in \
+                         /(np.power(mf_list[:,None]*Z_in,2) + np.power(self.en_list[None,:]-self.mu,2) + np.power(phi_in,2))
+
+            #expand zeroth axis to all frequencies (not just fermionic)
+            expanded_fermion_arr[:,:] = np.apply_along_axis(expand_fermion,0,fermion_arr)
+
+            #fourier transform expanded array to (imaginary) time
+            expanded_fermion_arr[:,:] = fft.fft(expanded_fermion_arr,axis=0)
+            
+            #contract energies and multiply arrays along time axis, then extract fermionic frequencies
+            phi_out[:,:] = -1.0 * temp * np.apply_along_axis(contract_fermion,0,fft.ifft(np.einsum('ijk,ik->ij',pot_time_arr,expanded_fermion_arr),axis=0))
+
+
+    
+            diff = np.linalg.norm(Z_out - Z_in) + np.linalg.norm(phi_out - phi_in)
+            
+            if verbose == 1:
+                print('\nIteration:',idx)
+                print('diff:',diff)
+
+            if  diff < tol:
+                if verbose == 1:
+                    print('\nConvergence achieved')
+                    print('diff:',diff)
+                return (Z_out, phi_out)
+           
+           #initialize new Z_in and phi_in from old Z_out and phi_out for next iteration
+            Z_in[:,:] = Z_out
+            phi_in[:,:] = phi_out
+        
+        #if we have reached this point, convergence has not been achieved
+        if verbose == 1:
+            print('Convergence has not been achieved')
+            print('diff: {}'.format(diff))
+        return (Z_out,phi_out)
 
 def phonon_int(coupling):
     def pot_fn(mf_1,en_1,mf_2,en_2):

@@ -34,7 +34,7 @@ phonon_freq = 0.1
 rydberg = 13.6
 
 rho = rydberg/phonon_freq
-freq_cut = 5.0
+freq_cut = 9.0
 num_en_1 = 70
 num_en_2 = 70
 
@@ -76,7 +76,7 @@ for mu in mu_list:
 
 #    tc_guess = 0.25
 #    temp_list = [0.03,0.04,.05]
-#    tc = eberg.find_tc_eigval(tc0 = 0.02)
+    tc = eberg.find_tc_ir()
 #    print('\ntc:',tc)
 
 #    gap = eberg.find_gap(tc0=0.1)
@@ -84,11 +84,10 @@ for mu in mu_list:
 ##    with open(filename,'a') as f:
 ##        f.writelines('{} {}\n'.format(mu,tc))
 
-    temp = 0.025
-    gap_ir = eberg.find_gap_ir(temp)
+    gap_ir = eberg.find_gap_ir(temp=tc+0.01)
     with open('gap_file_{}.txt'.format(mu),'w') as ff:
         ff.writelines('mu temp freq_cut num_energies a b\n')
-        ff.writelines('{} {} {} {} {} {}\n'.format(mu,temp,freq_cut,len(en_list),en_list[0],en_list[-1]))
+        ff.writelines('{} {} {} {} {} {}\n'.format(mu,tc+0.01,freq_cut,len(en_list),en_list[0],en_list[-1]))
         np.savetxt(ff,gap_ir)
     
     #save en_list

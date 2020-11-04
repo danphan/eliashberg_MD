@@ -1,5 +1,5 @@
 """
-Solve for Z and phi using nonlinear Eliashberg equation for a given temperature 
+Solve for Z and chi using linear Eliashberg equation for a given temperature 
 """
 import matplotlib.pyplot as plt
 import numpy as np
@@ -66,23 +66,16 @@ eberg = eb.Eberg(pot_fn = pot_fn,
               dos = dos)
 
 
-temp = 0.03
-#without fft
-Z,phi = eberg.find_Z_phi_nonlin(temp,verbose=1)
-#with fft
-Z_fft,phi_fft = eberg.find_Z_phi_nonlin_fft(temp,verbose=1)
+temp = 0.04
+Z,chi = eberg.find_Z_chi(temp,verbose=1)
 
 mf_list = eb.mf_list(temp,freq_cut)
 
-plt.subplot(1,2,1)
-plt.plot(en_list,phi[int(len(mf_list)/2),:],'o',label='no fft')
-plt.plot(en_list,phi_fft[int(len(mf_list)/2),:],'o',label='fft')
-
-
-plt.subplot(1,2,2)
-plt.plot(mf_list,phi[:,0],'o',label='no fft')
-plt.plot(mf_list,phi_fft[:,0],'o',label = 'fft')
-
-plt.legend()
+ax1 = plt.subplot(1,2,1)
+ax1.plot(en_list,chi[int(len(mf_list)/2),:],'o')
+ax1.set_title('chi vs energy')
+ax2 = plt.subplot(1,2,2)
+ax2.plot(mf_list,Z[:,0],'o')
+ax2.set_title('Z vs frequency')
 plt.savefig('Z_phi_nonlinear_temp_{}_mu_{}.pdf'.format(temp,mu))
 plt.show()
