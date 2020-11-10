@@ -611,7 +611,7 @@ class Eberg:
         return gap
     
     """Method to find Tc if there is Cooper log. Only valid for weak coupling."""
-    def find_tc_ir(self,om_cut = 1.0,temp_list = None,save_data = False):
+    def find_tc_ir(self,om_cut = 1.0,temp_list = None,save_data = None):
        
         if temp_list is None:
             temp_list = np.array([0.05,0.08,0.1,0.12])
@@ -639,9 +639,13 @@ class Eberg:
             lambda_list.append(lambda_bar)
 
         #save data points
-        if save_data == True:
+        if save_data is not None:
+            
+            #check if save_data is a string
+            if not isinstance(save_data,str):
+                raise TypeError('save_data must be a string!')
 
-            np.savetxt('lambda_data.txt',np.transpose(np.array([L_list,lambda_list])))
+            np.savetxt(save_data,np.transpose(np.array([L_list,lambda_list])))
 
         #fit line to data points
         [m,b]=np.polyfit(L_list,lambda_list,1)
